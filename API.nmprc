@@ -1,0 +1,2 @@
+        export GITHUB_TOKEN="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"
+        npm config set '//npm.pkg.github.com/:_authToken' "${GITHUB_TOKEN}"
