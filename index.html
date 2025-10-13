@@ -4,9 +4,7 @@
   <meta charset="UTF-8" />
   <title>7TV Emote Leaderboard (All-Time)</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       background: #0e0e10;
       color: white;
@@ -43,9 +41,7 @@
       cursor: pointer;
       font-size: 1rem;
     }
-    button:hover {
-      opacity: 0.9;
-    }
+    button:hover { opacity: 0.9; }
     table {
       margin: 2rem auto;
       width: 80%;
@@ -54,7 +50,6 @@
       border-radius: 10px;
       overflow: hidden;
       box-shadow: 0 0 15px rgba(0,0,0,0.3);
-      transition: all 0.3s;
     }
     th, td {
       padding: 12px 16px;
@@ -67,12 +62,8 @@
       text-transform: uppercase;
       font-size: 0.9rem;
     }
-    td {
-      font-size: 1rem;
-    }
-    tr:nth-child(even) {
-      background: #18181b;
-    }
+    td { font-size: 1rem; }
+    tr:nth-child(even) { background: #18181b; }
     .avatar {
       width: 36px;
       height: 36px;
@@ -111,14 +102,13 @@
       text-shadow: 0 0 6px rgba(177,140,255,0.8);
       transition: 0.2s;
     }
-    /* Optional paint gradient if user has 7TV paint
-       Include the standard `background-clip` for compatibility and
-       a color fallback (transparent) to avoid warnings. */
+
+    /* Paint gradient (with compatibility) */
     .paint {
       background: linear-gradient(90deg, #9146FF, #b18cff);
-      background-clip: text;           /* standard property */
-      -webkit-background-clip: text;   /* webkit fallback */
-      color: transparent;              /* fallback for non-supporting browsers */
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
       -webkit-text-fill-color: transparent;
     }
   </style>
@@ -135,7 +125,7 @@
 
   <table>
     <thead>
-      <tr><th>#</th><th>User</th><th>Emotes Used (All-Time)</th></tr>
+      <tr><th>#</th><th>User</th><th>Emotes Used (Live)</th></tr>
     </thead>
     <tbody id="leaderboard"></tbody>
   </table>
@@ -145,6 +135,7 @@
     let channel = null;
     let users = {};
 
+    // 🔹 Handle incoming WebSocket updates from the server
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
       if (data.type === "update" && data.channel === channel) {
@@ -153,26 +144,31 @@
       }
     };
 
+    // 🔹 Start tracking a new channel
     async function loadChannel() {
       channel = document.getElementById("channelInput").value.trim().toLowerCase();
       if (!channel) return;
+
       document.getElementById("loading").style.display = "block";
       document.getElementById("title").innerText = `Tracking: ${channel}`;
-      // If your backend route is /api/leaderboard/:channel change this fetch accordingly.
-      // This uses the /api/channel/:channel endpoint if that's what your server exposes.
+
+      // Start tracking channel (this will also begin the WebSocket updates)
+      await fetch(`/api/channel/${channel}`);
       const res = await fetch(`/api/channel/${channel}`);
       const data = await res.json();
+
       users = {};
-      // handle both formats: if data.users exists, use it; otherwise data may already be an array
-      const arr = data.users || data;
-      arr.forEach(u => users[u.id] = u);
+      data.users.forEach(u => users[u.id] = u);
+
       document.getElementById("loading").style.display = "none";
       render();
     }
 
+    // 🔹 Render leaderboard in real-time
     function render() {
       const sorted = Object.values(users).sort((a, b) => b.count - a.count);
       const tbody = document.getElementById("leaderboard");
+
       tbody.innerHTML = sorted.map((u, i) => `
         <tr class="fade">
           <td>${i + 1}</td>
