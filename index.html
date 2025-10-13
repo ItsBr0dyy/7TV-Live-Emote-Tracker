@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>7TV Live Emote Tracker</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      background: #0e0e10;
+      color: white;
+      font-family: 'Inter', sans-serif;
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      color: #9f7bff;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+    input {
+      padding: 0.5rem 0.8rem;
+      border: 2px solid #9146FF;
+      border-radius: 8px;
+      margin-right: 0.5rem;
+      background: #1f1f23;
+      color: white;
+      font-size: 1rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: #b18cff;
+    }
+    button {
+      padding: 0.5rem 1.2rem;
+      border: none;
+      background: linear-gradient(90deg, #9146FF, #b18cff);
+      color: white;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    table {
+      margin: 2rem auto;
+      width: 80%;
+      border-collapse: collapse;
+      background: #1a1a1d;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      transition: all 0.3s;
+    }
+    th, td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #2c2c2e;
+    }
+    th {
+      background: #252528;
+      font-weight: 600;
+      color: #bcbcbc;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+    td {
+      font-size: 1rem;
+    }
+    tr:nth-child(even) {
+      background: #18181b;
+    }
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    #title {
+      margin-top: 1rem;
+      font-size: 1.3rem;
+      color: #aaa;
+    }
+    #loading {
+      display: none;
+      font-size: 1rem;
+      color: #888;
+      margin-top: 1rem;
+    }
+    .fade {
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <h1>💫 7TV Live Emote Tracker</h1>
+  <div>
+    <input id="channelInput" placeholder="Enter Twitch channel..." />
+    <button onclick="loadChannel()">Start Tracking</button>
+  </div>
+
+  <div id="title"></div>
+  <div id="loading">Loading 7TV data...</div>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>User</th><th>Emotes Used</th></tr>
+    </thead>
+    <tbody id="leaderboard"></tbody>
+  </table>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}`);
+    let channel = null;
+    let users = {};
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === "update" && data.channel === channel) {
+        users[data.user.id] = data.user;
+        render();
+      }
+    };
+
+    async function loadChannel() {
+      channel = document.getElementById("channelInput").value.trim().toLowerCase();
+      if (!channel) return;
+      document.getElementById("loading").style.display = "block";
+      document.getElementById("title").innerText = `Tracking: ${channel}`;
+      await fetch(`/api/start/${channel}`);
+      const res = await fetch(`/api/leaderboard/${channel}`);
+      const data = await res.json();
+      users = {};
+      data.forEach(u => users[u.id] = u);
+      document.getElementById("loading").style.display = "none";
+      render();
+    }
+
+    function render() {
+      const sorted = Object.values(users).sort((a, b) => b.count - a.count);
+      const tbody = document.getElementById("leaderboard");
+      tbody.innerHTML = sorted.map((u, i) => `
+        <tr class="fade">
+          <td>${i + 1}</td>
+          <td>
+            <img class="avatar" src="${u.avatar || 'https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png'}" alt="avatar"/>
+            <span style="color: ${u.paint ? 'var(--paint-color, #fff)' : '#fff'};">${u.username}</span>
+          </td>
+          <td>${u.count}</td>
+        </tr>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
