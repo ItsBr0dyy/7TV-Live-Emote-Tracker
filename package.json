@@ -16,4 +16,7 @@
     "tmi.js": "^1.8.5",
     "ws": "^8.18.3"
   }
+    "dependencies": {
+    "your-package-name": "github:itsbr0dyy/7TV-Live-Emote-Tracker#main"
+    }
 }
