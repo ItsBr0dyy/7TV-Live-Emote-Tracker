@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>7TV Emote Leaderboard</title>
+  <title>7TV Emote Leaderboard (All-Time)</title>
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
     body {
       background: #0e0e10;
       color: white;
@@ -16,6 +18,7 @@
       color: #9f7bff;
       font-weight: 700;
       margin-bottom: 1rem;
+      text-align: center;
     }
     input {
       padding: 0.5rem 0.8rem;
@@ -25,6 +28,10 @@
       background: #1f1f23;
       color: white;
       font-size: 1rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: #b18cff;
     }
     button {
       padding: 0.5rem 1.2rem;
@@ -36,15 +43,18 @@
       cursor: pointer;
       font-size: 1rem;
     }
-    button:hover { opacity: 0.9; }
+    button:hover {
+      opacity: 0.9;
+    }
     table {
       margin: 2rem auto;
-      width: 85%;
+      width: 80%;
       border-collapse: collapse;
       background: #1a1a1d;
       border-radius: 10px;
       overflow: hidden;
       box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      transition: all 0.3s;
     }
     th, td {
       padding: 12px 16px;
@@ -57,36 +67,75 @@
       text-transform: uppercase;
       font-size: 0.9rem;
     }
-    tr:nth-child(even) { background: #18181b; }
+    td {
+      font-size: 1rem;
+    }
+    tr:nth-child(even) {
+      background: #18181b;
+    }
     .avatar {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       vertical-align: middle;
       margin-right: 8px;
-      border: 2px solid #9146FF;
     }
-    .paint-name {
+    #title {
+      margin-top: 1rem;
+      font-size: 1.3rem;
+      color: #aaa;
+    }
+    #loading {
+      display: none;
+      font-size: 1rem;
+      color: #888;
+      margin-top: 1rem;
+    }
+    .fade {
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Username styling */
+    td span.username {
       font-weight: 600;
-      background-clip: text;
-      -webkit-background-clip: text;
+      color: #ffffff;
+      text-shadow: 0 0 4px rgba(0,0,0,0.7);
+      letter-spacing: 0.3px;
+    }
+    tr td span.username:hover {
+      color: #b18cff;
+      text-shadow: 0 0 6px rgba(177,140,255,0.8);
+      transition: 0.2s;
+    }
+    /* Optional paint gradient if user has 7TV paint
+       Include the standard `background-clip` for compatibility and
+       a color fallback (transparent) to avoid warnings. */
+    .paint {
+      background: linear-gradient(90deg, #9146FF, #b18cff);
+      background-clip: text;           /* standard property */
+      -webkit-background-clip: text;   /* webkit fallback */
+      color: transparent;              /* fallback for non-supporting browsers */
       -webkit-text-fill-color: transparent;
     }
-    #loading { display: none; color: #aaa; margin-top: 1rem; }
   </style>
 </head>
 <body>
-<h1>7TV Emote Leaderboard (All-Time)</h1>
+  <h1>7TV Emote Leaderboard (All-Time)</h1>
   <div>
     <input id="channelInput" placeholder="Enter Twitch channel..." />
     <button onclick="loadChannel()">Start Tracking</button>
   </div>
+
   <div id="title"></div>
-  <div id="loading">Loading leaderboard...</div>
+  <div id="loading">Loading 7TV data...</div>
 
   <table>
     <thead>
-      <tr><th>#</th><th>User</th><th>Emotes Used (All Time)</th></tr>
+      <tr><th>#</th><th>User</th><th>Emotes Used (All-Time)</th></tr>
     </thead>
     <tbody id="leaderboard"></tbody>
   </table>
@@ -109,11 +158,14 @@
       if (!channel) return;
       document.getElementById("loading").style.display = "block";
       document.getElementById("title").innerText = `Tracking: ${channel}`;
-      await fetch(`/api/start/${channel}`);
-      const res = await fetch(`/api/leaderboard/${channel}`);
+      // If your backend route is /api/leaderboard/:channel change this fetch accordingly.
+      // This uses the /api/channel/:channel endpoint if that's what your server exposes.
+      const res = await fetch(`/api/channel/${channel}`);
       const data = await res.json();
       users = {};
-      data.forEach(u => users[u.id] = u);
+      // handle both formats: if data.users exists, use it; otherwise data may already be an array
+      const arr = data.users || data;
+      arr.forEach(u => users[u.id] = u);
       document.getElementById("loading").style.display = "none";
       render();
     }
@@ -121,23 +173,16 @@
     function render() {
       const sorted = Object.values(users).sort((a, b) => b.count - a.count);
       const tbody = document.getElementById("leaderboard");
-      tbody.innerHTML = sorted.map((u, i) => {
-        let paintStyle = '';
-        if (u.paint?.gradient) {
-          const g = u.paint.gradient;
-          paintStyle = `background: linear-gradient(${g.angle || 0}deg, ${g.colors.join(', ')});`;
-        }
-        return `
-          <tr>
-            <td>${i + 1}</td>
-            <td style="text-align: left;">
-              <img class="avatar" src="${u.avatar}" alt="avatar"/>
-              <span class="paint-name" style="${paintStyle}">${u.username}</span>
-            </td>
-            <td>${u.count.toLocaleString()}</td>
-          </tr>
-        `;
-      }).join('');
+      tbody.innerHTML = sorted.map((u, i) => `
+        <tr class="fade">
+          <td>${i + 1}</td>
+          <td style="text-align: left;">
+            <img class="avatar" src="${u.avatar || 'https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png'}" alt="avatar"/>
+            <span class="username ${u.paint ? 'paint' : ''}">${u.username}</span>
+          </td>
+          <td>${(u.count || 0).toLocaleString()}</td>
+        </tr>
+      `).join('');
     }
   </script>
 </body>
