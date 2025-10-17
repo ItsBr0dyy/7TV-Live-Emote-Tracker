@@ -1,125 +1,114 @@
 import express from "express";
-import fetch from "node-fetch";
-import tmi from "tmi.js";
 import { WebSocketServer } from "ws";
-import path from "path";
+import WebSocket from "ws";
 
 const app = express();
 const PORT = 3000;
-const __dirname = process.cwd();
 
-const activeChannels = {}; // { channel: { emotes:[], users:{}, emoteUsage:{} } }
-
+// Serve static HTML (index.html, CSS, JS)
 app.use(express.static("public"));
 
-// 🔹 Get 7TV emotes for a channel
-async function get7TVEmotes(channel) {
-  try {
-    const res = await fetch(`https://7tv.io/v3/users/twitch/${channel}`);
-    const data = await res.json();
-    return data.emote_set?.emotes?.map(e => ({
-      name: e.name,
-      id: e.id,
-      url: `https://cdn.7tv.app/emote/${e.id}/4x.webp`
-    })) || [];
-  } catch (e) {
-    console.log("7TV fetch failed:", e);
-    return [];
-  }
-}
+// Local memory
+let clients = [];
+let emoteUsage = {}; // { emoteName: count }
+let userUsage = {}; // { username: count }
 
-// 🔹 Get Twitch user info
-async function getTwitchUser(username) {
-  try {
-    const res = await fetch(`https://7tv.io/v3/users/twitch/${username}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return {
-      id: data.id,
-      avatar: data.avatar_url || "https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png",
-      paint: data.style?.paint_id || null
-    };
-  } catch {
-    return null;
-  }
-}
+// Create HTTP + WebSocket server
+const server = app.listen(PORT, () =>
+  console.log(`💜 Server running at http://localhost:${PORT}`)
+);
+const wss = new WebSocketServer({ server });
 
-// 🔹 Connect and track emotes in a channel
-async function startTracking(channel) {
-  if (activeChannels[channel]) return activeChannels[channel];
-  console.log(`Starting tracking for ${channel}`);
-
-  const emotes = await get7TVEmotes(channel);
-  const users = {};
-  const emoteUsage = {};
-
-  const client = new tmi.Client({
-    connection: { reconnect: true },
-    channels: [channel]
+// Broadcast data to all connected clients
+function broadcast(data) {
+  const message = JSON.stringify(data);
+  clients.forEach((ws) => {
+    if (ws.readyState === ws.OPEN) ws.send(message);
   });
+}
 
-  client.connect();
+// Handle client dashboard connections
+wss.on("connection", (ws) => {
+  clients.push(ws);
+  console.log("🟣 New dashboard connected");
+  ws.send(JSON.stringify({ type: "init", emoteUsage, userUsage }));
 
-  client.on("message", async (ch, tags, msg, self) => {
-    if (self) return;
-    const username = tags["display-name"] || tags.username;
+  ws.on("close", () => {
+    clients = clients.filter((c) => c !== ws);
+  });
+});
 
-    if (!users[username]) {
-      const info = await getTwitchUser(username);
-      users[username] = {
-        username,
-        id: info?.id || username,
-        avatar: info?.avatar,
-        paint: info?.paint,
-        count: 0
-      };
+// 🔹 Connect to StreamElements WebSocket
+const seSocket = new WebSocket("wss://realtime.streamelements.com/socket");
+
+// When StreamElements connects
+seSocket.on("open", () => {
+  console.log("💫 Connected to StreamElements Realtime API");
+});
+
+// Handle StreamElements messages
+seSocket.on("message", (msg) => {
+  try {
+    const data = JSON.parse(msg);
+
+    // Welcome event
+    if (data.type === "welcome") {
+      console.log("✅ Connected to StreamElements Realtime API (Session:", data.payload?.id, ")");
+      return;
     }
 
-    const words = msg.split(/\s+/);
-    const used = emotes.filter(e => words.includes(e.name));
-
-    if (used.length > 0) {
-      for (const e of used) {
-        users[username].count++;
-        emoteUsage[e.name] = (emoteUsage[e.name] || 0) + 1;
-      }
-      broadcast(channel, { type: "update", user: users[username], emoteUsage });
+    // Ping-Pong keepalive
+    if (data.type === "ping") {
+      seSocket.send(JSON.stringify({ type: "pong" }));
+      return;
     }
-  });
 
-  activeChannels[channel] = { emotes, users, emoteUsage, client };
-  return activeChannels[channel];
+    // Handle chat messages
+    if (data.type === "event" && data.event?.type === "message") {
+      const message = data.event.data;
+      const username = message.nick || "UnknownUser";
+      const emotes = message.emotes || [];
+
+      // Count message as 1 for user
+      userUsage[username] = (userUsage[username] || 0) + 1;
+
+      // Count emote usage
+      emotes.forEach((em) => {
+        const name = em.text || em.name || "unknown";
+        emoteUsage[name] = (emoteUsage[name] || 0) + 1;
+      });
+
+      // Broadcast updates
+      broadcast({
+        type: "update",
+        userUsage,
+        emoteUsage,
+      });
+    }
+  } catch (err) {
+    console.error("Error handling StreamElements message:", err);
+  }
+});
+
+seSocket.on("close", () => {
+  console.log("⚠️ Disconnected from StreamElements Realtime API. Reconnecting in 5s...");
+  setTimeout(() => reconnectSE(), 5000);
+});
+
+seSocket.on("error", (err) => {
+  console.error("❌ StreamElements socket error:", err.message);
+});
+
+// Auto-reconnect function
+function reconnectSE() {
+  const newSocket = new WebSocket("wss://realtime.streamelements.com/socket");
+  newSocket.on("open", () => {
+    console.log("🔄 Reconnected to StreamElements API");
+    seSocket = newSocket;
+  });
 }
 
-// 🔹 WebSocket setup
-const wss = new WebSocketServer({ noServer: true });
-const sockets = new Set();
-
-function broadcast(channel, data) {
-  const msg = JSON.stringify({ channel, ...data });
-  for (const ws of sockets) ws.send(msg);
-}
-
-const server = app.listen(PORT, () => {
-  console.log(`✅ Running at http://localhost:${PORT}`);
+// Express API for debugging
+app.get("/api/data", (req, res) => {
+  res.json({ users: userUsage, emotes: emoteUsage });
 });
-
-server.on("upgrade", (req, socket, head) => {
-  wss.handleUpgrade(req, socket, head, ws => {
-    sockets.add(ws);
-    ws.on("close", () => sockets.delete(ws));
-  });
-});
-
-// 🔹 API Routes
-app.get("/api/channel/:channel", async (req, res) => {
-  const channel = req.params.channel.toLowerCase();
-  const tracker = await startTracking(channel);
-  res.json({
-    emotes: tracker.emotes,
-    users: Object.values(tracker.users),
-    emoteUsage: tracker.emoteUsage
-  });
-});
-
-app.use(express.static(path.join(__dirname, "public")));
