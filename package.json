@@ -1,22 +1,12 @@
 {
   "name": "7tv-leaderboard",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Live 7TV / StreamElements emote leaderboard tracker",
+  "author": "YourName",
+  "license": "MIT",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "vercel dev"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "better-sqlite3": "^12.4.1",
-    "express": "^5.1.0",
-    "node-fetch": "^3.3.2",
-    "tmi.js": "^1.8.5",
-    "ws": "^8.18.3"
-  }
-    "dependencies": {
-    "your-package-name": "github:itsbr0dyy/7TV-Live-Emote-Tracker#main"
-    }
+  "dependencies": {},
+  "devDependencies": {}
 }
